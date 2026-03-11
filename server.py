@@ -76,6 +76,12 @@ def get_flow_run_logs(flow_run_id: str) -> str:
                      Extract this from the Slack notification URL — it is
                      the UUID that appears after /flow-run/ in the URL.
     """
+    try:
+        headers = _api_headers()
+        endpoint = _logs_endpoint()
+    except ValueError as exc:
+        return f"Configuration error: {exc}"
+
     payload = {
         "logs": {
             "flow_run_id": {"any_": [flow_run_id]},
@@ -87,12 +93,7 @@ def get_flow_run_logs(flow_run_id: str) -> str:
     }
 
     try:
-        response = httpx.post(
-            _logs_endpoint(),
-            headers=_api_headers(),
-            json=payload,
-            timeout=30,
-        )
+        response = httpx.post(endpoint, headers=headers, json=payload, timeout=30)
         response.raise_for_status()
     except httpx.HTTPStatusError as exc:
         return (
@@ -108,12 +109,7 @@ def get_flow_run_logs(flow_run_id: str) -> str:
         # Re-try with no level filter — the flow may have only INFO logs
         payload["logs"] = {"flow_run_id": {"any_": [flow_run_id]}}  # type: ignore[assignment]
         try:
-            response = httpx.post(
-                _logs_endpoint(),
-                headers=_api_headers(),
-                json=payload,
-                timeout=30,
-            )
+            response = httpx.post(endpoint, headers=headers, json=payload, timeout=30)
             response.raise_for_status()
             logs = response.json()
         except (httpx.HTTPStatusError, httpx.RequestError):
