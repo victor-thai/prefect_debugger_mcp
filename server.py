@@ -15,7 +15,7 @@ Environment variables required (set all three as secrets — never hard-code the
 import os
 
 import httpx
-from mcp.server.fastmcp import FastMCP
+from fastmcp import FastMCP
 
 mcp = FastMCP("Prefect Debugger")
 
