@@ -1,10 +1,8 @@
 """
 Prefect Debugger MCP Server
 
-Exposes a single tool — get_flow_run_logs — that fetches the full logs
-for a Prefect Cloud flow run given its flow_run_id.  The Cursor Automation
-calls this tool to retrieve the traceback and error context before running
-the debugger prompt.
+Exposes read-only Prefect Cloud tools for flow-run logs, granular flow and task
+run searches, deployment lookups, artifacts, counts, and failure summaries.
 
 Environment variables required (set all three as secrets — never hard-code them):
     PREFECT_API_KEY       — your Prefect Cloud API key
@@ -76,15 +74,7 @@ def _api_headers() -> dict[str, str]:
     }
 
 
-def _logs_endpoint() -> str:
-    return _workspace_api_url("/logs/filter")
-
-
-def _flow_runs_endpoint() -> str:
-    return _workspace_api_url("/flow_runs/filter")
-
-
-def _workspace_api_url(path: str) -> str:
+def _workspace_base() -> str:
     account_id = os.environ.get("PREFECT_ACCOUNT_ID", "")
     workspace_id = os.environ.get("PREFECT_WORKSPACE_ID", "")
     if not account_id:
@@ -97,12 +87,21 @@ def _workspace_api_url(path: str) -> str:
             "PREFECT_WORKSPACE_ID environment variable is not set. "
             "Add it to your Cursor Cloud Agents dashboard under Secrets."
         )
+    return f"{PREFECT_CLOUD_BASE}/accounts/{account_id}/workspaces/{workspace_id}"
+
+
+def _logs_endpoint() -> str:
+    return _workspace_api_url("/logs/filter")
+
+
+def _flow_runs_endpoint() -> str:
+    return _workspace_api_url("/flow_runs/filter")
+
+
+def _workspace_api_url(path: str) -> str:
     if not path.startswith("/"):
         path = f"/{path}"
-    return (
-        f"{PREFECT_CLOUD_BASE}/accounts/{account_id}"
-        f"/workspaces/{workspace_id}{path}"
-    )
+    return f"{_workspace_base()}{path}"
 
 
 def _get_workspace_resource(path: str) -> dict:
@@ -855,6 +854,26 @@ def search_recent_failed_flow_runs(
         limit=limit,
         sort="START_TIME_DESC",
     )
+
+
+@mcp.tool()
+def get_recent_deployment_runs(deployment_name: str, limit: int = 20) -> list[dict]:
+    """
+    Returns the most recent flow runs for a named deployment, ordered newest first.
+    Each entry has: id, state_type (COMPLETED/FAILED/CRASHED), start_time, end_time.
+    Use this to check if a deployment has been failing consecutively across multiple days.
+
+    Args:
+        deployment_name: The exact name of the deployment in Prefect Cloud.
+        limit: Number of recent runs to return (default 20).
+    """
+    payload = {
+        "sort": "START_TIME_DESC",
+        "limit": limit,
+        "deployments": {"name": {"any_": [deployment_name]}},
+    }
+
+    return _post_flow_run_search(payload)
 
 
 if __name__ == "__main__":
